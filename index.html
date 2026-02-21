@@ -210,7 +210,7 @@
                     <p class="mb-1 text-gray-400">CONTACT_INFO:</p>
                     <p class="mb-1 pl-2 md:pl-4 text-white">Email: <a href="mailto:donal@mcdermott.ie" class="text-termCyan hover:underline">donal@mcdermott.ie</a></p>
                     <p class="mb-1 pl-2 md:pl-4 text-white">Instagram: <a href="https://instagram.com/donalmcdermott" target="_blank" class="text-termCyan hover:underline break-all">@donalmcdermott</a></p>
-                    <p class="mb-4 pl-2 md:pl-4 text-white">LinkedIn: <a href="https://linkedin.com/" target="_blank" class="text-termCyan hover:underline">linkedin.com</a></p>
+                    <p class="mb-4 pl-2 md:pl-4 text-white">LinkedIn: <a href="https://www.linkedin.com/in/donal-mcdermott-09018824b/" target="_blank" class="text-termCyan hover:underline">linkedin.com/in/donal-mcdermott...</a></p>
                 </div>
             </div>
 
@@ -296,7 +296,7 @@
                     <a href="https://instagram.com/donalmcdermott" target="_blank" class="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors">
                         <i class="fab fa-instagram mr-1 text-pink-500"></i> IG
                     </a>
-                    <a href="https://www.linkedin.com/" target="_blank" class="bg-blue-600 hover:bg-blue-500 border border-blue-700 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors">
+                    <a href="https://www.linkedin.com/in/donal-mcdermott-09018824b/" target="_blank" class="bg-blue-600 hover:bg-blue-500 border border-blue-700 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors">
                         <i class="fab fa-linkedin mr-1"></i> LinkedIn
                     </a>
                 </div>
@@ -427,8 +427,6 @@
             <span id="os-clock" class="text-white">00:00</span>
         </div>
     </div>
-
-    <a id="downloadLink" style="display: none;"></a>
 
     <!-- Scripts -->
     <script>
@@ -614,12 +612,9 @@
             openWindow('win-project-viewer');
         }
 
-        // CV Download Function
+        // CV Open Function - Opens in a new tab instead of downloading
         function downloadCV() {
-            const a = document.getElementById('downloadLink');
-            a.href = 'Donal_McDermott_Resume_2026.pdf';
-            a.download = 'Donal_McDermott_Resume_2026.pdf';
-            a.click();
+            window.open('Donal_McDermott_Resume_2026.pdf', '_blank');
         }
     </script>
 </body>
