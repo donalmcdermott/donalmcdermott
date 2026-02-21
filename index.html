@@ -37,7 +37,17 @@
     </script>
 
     <style>
-        body {
+        /* Lock body to prevent mobile page scrolling/bouncing */
+        html, body {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            overscroll-behavior: none;
             font-family: 'Inter', sans-serif;
             user-select: none;
             -webkit-touch-callout: none; /* Disable iOS callout */
@@ -123,7 +133,7 @@
                 top: 2% !important;
                 left: 2% !important;
                 width: 96% !important;
-                height: calc(100dvh - 4.5rem) !important; /* Leaves room for taskbar */
+                height: calc(100% - 4.5rem) !important; /* Leaves room for taskbar */
             }
             .window-header {
                 cursor: default; /* No dragging cursor needed on mobile */
@@ -131,8 +141,7 @@
         }
     </style>
 </head>
-<!-- Use h-[100dvh] instead of h-screen for mobile browser compatibility -->
-<body class="h-[100dvh] w-screen scanlines text-gray-300 overflow-hidden bg-cover bg-center" style="background-image: radial-gradient(circle at center, #111827 0%, #050505 100%);">
+<body class="w-full h-full scanlines text-gray-300 bg-cover bg-center" style="background-image: radial-gradient(circle at center, #111827 0%, #050505 100%);">
 
     <!-- Desktop Environment -->
     <div id="desktop" class="absolute inset-0 p-4 pt-8 grid grid-cols-4 md:grid-cols-1 gap-4 place-content-start md:w-24 z-0">
@@ -392,7 +401,7 @@
     <div class="absolute bottom-0 w-full h-12 bg-taskbar border-t border-gray-800 flex items-center justify-between px-2 md:px-4 z-50">
         <!-- Scrollable apps container on mobile -->
         <div class="flex items-center gap-1 md:gap-2 overflow-x-auto whitespace-nowrap no-scrollbar flex-1 pr-2">
-            <button class="text-white hover:text-termCyan p-2 font-bold font-mono tracking-wider flex items-center gap-2 shrink-0">
+            <button onclick="closeAllWindows()" class="text-white hover:text-termCyan p-2 font-bold font-mono tracking-wider flex items-center gap-2 shrink-0">
                 <i class="fab fa-linux text-xl"></i> <span class="hidden md:inline">DONAL_OS</span>
             </button>
             <div class="w-px h-6 bg-gray-700 mx-1 md:mx-2 shrink-0"></div>
@@ -451,6 +460,15 @@
             const taskPrefix = id.replace('win-', 'task-');
             const taskItem = document.getElementById(taskPrefix);
             if(taskItem) taskItem.classList.add('hidden');
+        }
+
+        function closeAllWindows() {
+            document.querySelectorAll('.window').forEach(win => {
+                win.classList.add('hidden');
+                const taskPrefix = win.id.replace('win-', 'task-');
+                const taskItem = document.getElementById(taskPrefix);
+                if(taskItem) taskItem.classList.add('hidden');
+            });
         }
 
         function bringToFrontById(id) {
@@ -535,6 +553,14 @@
         }
 
         document.querySelectorAll('.window').forEach(makeDraggable);
+
+        // Mobile Startup Logic
+        window.addEventListener('DOMContentLoaded', () => {
+            // If the screen width is mobile size, close everything to show a clean desktop
+            if (window.innerWidth <= 768) {
+                closeAllWindows();
+            }
+        });
 
         // Project Data & Viewer Logic
         const projectData = {
