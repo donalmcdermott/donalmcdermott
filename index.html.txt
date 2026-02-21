@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-[#050505] overflow-hidden">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donal OS | Dev Environment</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ['"Fira Code"', 'monospace'],
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        termGreen: '#00ff41',
+                        termCyan: '#08f7fe',
+                        termYellow: '#f5d300',
+                        osBg: '#050505',
+                        winBg: '#0a0a0c',
+                        winBorder: '#1f2937',
+                        taskbar: '#111111'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+        }
+
+        /* CRT Scanline Effect (Global) */
+        .scanlines::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(
+                to bottom,
+                rgba(18, 16, 16, 0) 50%,
+                rgba(0, 0, 0, 0.25) 50%
+            );
+            background-size: 100% 4px;
+            z-index: 9999;
+            pointer-events: none;
+        }
+
+        /* Custom Scrollbar for Windows */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0a0a0c; border-left: 1px solid #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #374151; }
+        ::-webkit-scrollbar-thumb:hover { background: #00ff41; }
+
+        /* Window Styling */
+        .window {
+            position: absolute;
+            background-color: #0a0a0c;
+            border: 1px solid #374151;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(8, 247, 254, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: transform 0.1s;
+        }
+
+        .window-header {
+            cursor: grab;
+        }
+        .window-header:active {
+            cursor: grabbing;
+        }
+
+        /* Blinking Cursor */
+        .cursor-blink {
+            display: inline-block;
+            width: 8px;
+            height: 1.2em;
+            background-color: #00ff41;
+            vertical-align: middle;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        /* Glowing text */
+        .glow-cyan { text-shadow: 0 0 5px rgba(8, 247, 254, 0.5); }
+        
+        /* Desktop Icon Hover */
+        .desktop-icon:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+
+        /* Responsive Window Snapping for Mobile */
+        @media (max-width: 768px) {
+            .window {
+                top: 2% !important;
+                left: 2% !important;
+                width: 96% !important;
+                height: 85% !important;
+            }
+        }
+    </style>
+</head>
+<body class="h-screen w-screen scanlines text-gray-300 overflow-hidden bg-cover bg-center" style="background-image: radial-gradient(circle at center, #111827 0%, #050505 100%);">
+
+    <!-- Desktop Environment -->
+    <div id="desktop" class="absolute inset-0 p-4 pt-8 grid grid-cols-1 md:grid-cols-1 gap-4 place-content-start w-24 z-0">
+        
+        <!-- Desktop Icons -->
+        <div class="desktop-icon flex flex-col items-center justify-center p-2 cursor-pointer text-center group" onclick="openWindow('win-terminal')">
+            <i class="fas fa-terminal text-4xl text-termGreen drop-shadow-[0_0_8px_rgba(0,255,65,0.6)] mb-2 group-hover:scale-110 transition-transform"></i>
+            <span class="text-xs font-mono text-white bg-black/50 px-1 rounded">terminal.sh</span>
+        </div>
+
+        <div class="desktop-icon flex flex-col items-center justify-center p-2 cursor-pointer text-center group" onclick="openWindow('win-profile')">
+            <i class="fas fa-user-astronaut text-4xl text-termCyan drop-shadow-[0_0_8px_rgba(8,247,254,0.6)] mb-2 group-hover:scale-110 transition-transform"></i>
+            <span class="text-xs font-mono text-white bg-black/50 px-1 rounded">profile.png</span>
+        </div>
+
+        <div class="desktop-icon flex flex-col items-center justify-center p-2 cursor-pointer text-center group" onclick="openWindow('win-projects')">
+            <i class="fas fa-folder-open text-4xl text-termYellow drop-shadow-[0_0_8px_rgba(245,211,0,0.6)] mb-2 group-hover:scale-110 transition-transform"></i>
+            <span class="text-xs font-mono text-white bg-black/50 px-1 rounded">projects/</span>
+        </div>
+
+        <div class="desktop-icon flex flex-col items-center justify-center p-2 cursor-pointer text-center group" onclick="downloadCV()">
+            <i class="fas fa-file-arrow-down text-4xl text-white mb-2 group-hover:scale-110 transition-transform"></i>
+            <span class="text-xs font-mono text-white bg-black/50 px-1 rounded">resume.txt</span>
+        </div>
+    </div>
+
+
+    <!-- ==================== WINDOWS ==================== -->
+
+    <!-- App 1: Terminal (Main Portfolio) -->
+    <div id="win-terminal" class="window w-[800px] h-[550px]" style="top: 50px; left: 120px; z-index: 10;">
+        <div id="win-terminal-header" class="window-header h-8 bg-winBorder flex items-center px-4 justify-between select-none">
+            <div class="flex gap-2">
+                <div class="w-3 h-3 rounded-full bg-red-500 cursor-pointer hover:opacity-80 transition-opacity" onclick="closeWindow('win-terminal')"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500 cursor-pointer hover:opacity-80 transition-opacity" onclick="closeWindow('win-terminal')"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500 cursor-pointer hover:opacity-80 transition-opacity"></div>
+            </div>
+            <div class="text-xs font-mono text-gray-400">guest@donal-os: ~</div>
+            <div class="w-12"></div>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-4 md:p-6 font-mono text-sm">
+            <div class="mb-4 opacity-80">
+                Donal OS v2.0.1 (System Boot OK)<br>
+                Welcome to the portfolio environment.
+            </div>
+
+            <div class="mb-8">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-termGreen font-bold">guest@donal-os</span><span class="text-white">:</span><span class="text-termCyan">~</span><span class="text-white">$</span>
+                    <span class="text-white">cat intro.txt</span>
+                </div>
+                <div class="pl-4 mt-2">
+                    <pre class="text-termCyan glow-cyan font-bold text-lg md:text-3xl mb-4 hidden md:block">
+ ____  __  __ 
+|  _ \|  \/  |
+| | | | |\/| |
+| |_| | |  | |
+|____/|_|  |_|  Dónal McDermott
+                    </pre>
+                    <h1 class="text-termCyan glow-cyan font-bold text-xl mb-4 md:hidden">Dónal McDermott</h1>
+                    <p class="mb-1"><span class="text-termYellow">></span> Electronic & Computer Engineering @ Univ. of Galway</p>
+                    <p class="mb-1"><span class="text-termYellow">></span> Founder & CEO @ Cashew</p>
+                    <p class="mb-4"><span class="text-termYellow">></span> National Director @ STEM Racing Ireland</p>
+                    
+                    <p class="mb-1 text-gray-400">CONTACT_INFO:</p>
+                    <p class="mb-1 pl-4 text-white">Email: <a href="mailto:donal@mcdermott.ie" class="text-termCyan hover:underline">donal@mcdermott.ie</a></p>
+                    <p class="mb-1 pl-4 text-white">Instagram: <a href="https://instagram.com/donalmcdermott" target="_blank" class="text-termCyan hover:underline">@donalmcdermott</a></p>
+                    <p class="mb-4 pl-4 text-white">LinkedIn: <a href="https://linkedin.com/" target="_blank" class="text-termCyan hover:underline">linkedin.com</a></p>
+                </div>
+            </div>
+
+            <div class="mb-8">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-termGreen font-bold">guest@donal-os</span><span class="text-white">:</span><span class="text-termCyan">~/experience</span><span class="text-white">$</span>
+                    <span class="text-white">./list_roles.sh</span>
+                </div>
+                <div class="pl-4 mt-2 text-gray-400 border-l-2 border-gray-700">
+                    <div class="pl-4 mb-4">
+                        <span class="text-white font-bold">[ Founder & CEO ]</span> <span class="text-termCyan">@ Cashew</span><br>
+                        Built and led a team developing an AI-powered contact memory app. Pitched at Patch Accelerator Demo Day to 300+ attendees.
+                    </div>
+                    <div class="pl-4 mb-4">
+                        <span class="text-white font-bold">[ Software Engineer Intern ]</span> <span class="text-termCyan">@ Ericsson</span><br>
+                        Built automation scripts & redesigned UI components for Ericsson's CNIV platform, improving deployment efficiency.
+                    </div>
+                    <div class="pl-4 mb-4">
+                        <span class="text-white font-bold">[ National Director ]</span> <span class="text-termCyan">@ STEM Racing Ireland</span><br>
+                        Oversee Ireland's national STEM Racing competition. Led operations, partnerships, and events across universities.
+                    </div>
+                    <div class="pl-4">
+                        <span class="text-white font-bold">[ Founder and Lead Teacher ]</span> <span class="text-termCyan">@ Athlone Fiddle Lessons</span><br>
+                        Built and manage a small music school offering traditional Irish fiddle tuition.
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-8">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-termGreen font-bold">guest@donal-os</span><span class="text-white">:</span><span class="text-termCyan">~/awards</span><span class="text-white">$</span>
+                    <span class="text-white">cat honors.log</span>
+                </div>
+                <div class="pl-4 mt-2 text-gray-300">
+                    <p>><span class="text-termGreen ml-2">[Fellow]</span> Patch 2025</p>
+                    <p>><span class="text-termGreen ml-2">[Scholar]</span> Naughton Foundation National STEM Scholarship</p>
+                    <p>><span class="text-termGreen ml-2">[Award]</span> Meta Engineer of the Future Award</p>
+                    <p>><span class="text-termGreen ml-2">[Award]</span> Madden Art in Engineering Award</p>
+                    <p>><span class="text-termGreen ml-2">[Award]</span> Student of the Year 2024 (Marist College)</p>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-termGreen font-bold">guest@donal-os</span><span class="text-white">:</span><span class="text-termCyan">~</span><span class="text-white">$</span>
+                    <span class="cursor-blink"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- App 2: Image Viewer (Profile Picture) -->
+    <div id="win-profile" class="window w-[350px] h-[500px]" style="top: 80px; left: 650px; z-index: 11;">
+        <div id="win-profile-header" class="window-header h-8 bg-winBorder flex items-center px-4 justify-between select-none">
+            <div class="flex gap-2">
+                <div class="w-3 h-3 rounded-full bg-red-500 cursor-pointer hover:opacity-80 transition-opacity" onclick="closeWindow('win-profile')"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500 cursor-pointer hover:opacity-80 transition-opacity" onclick="closeWindow('win-profile')"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+            </div>
+            <div class="text-xs font-mono text-gray-400">profile.png - Image Viewer</div>
+            <div class="w-12"></div>
+        </div>
+        <div class="flex-1 bg-[#111] p-4 flex flex-col items-center justify-center relative">
+            <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCI+PHBhdGggZD0iTTAgMGgyMHYyMEgwem0xIDE5aDE4VjFIMXoiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wMykiLz48L3N2Zz4=')] opacity-50 z-0"></div>
+            
+            <div class="relative z-10 border-2 border-termCyan p-1 bg-black shadow-[0_0_20px_rgba(8,247,254,0.3)]">
+                <!-- Direct load from the uploaded filename -->
+                <img src="https://media.licdn.com/dms/image/v2/D4E03AQFdjKDQFoCVdQ/profile-displayphoto-crop_800_800/B4EZgtOukiGYAM-/0/1753105494115?e=1773273600&v=beta&t=UxkgEQ8X6Z8qqUgBENflyy_0CN4SO5t6T42N9Bdc_WU" 
+                     alt="Dónal McDermott" 
+                     class="w-64 h-64 object-cover">
+                
+                <div class="absolute bottom-2 right-2 text-[10px] font-mono text-termGreen bg-black/70 px-1">
+                    [ID: D-MCD-01]
+                </div>
+            </div>
+
+            <div class="mt-6 w-full text-center z-10">
+                <h2 class="text-white font-bold text-lg tracking-wide">DÓNAL MCDERMOTT</h2>
+                
+                <div class="flex justify-center gap-3 mt-4 flex-wrap">
+                    <a href="mailto:donal@mcdermott.ie" class="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors">
+                        <i class="fas fa-envelope mr-1 text-termCyan"></i> Email
+                    </a>
+                    <a href="https://instagram.com/donalmcdermott" target="_blank" class="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors">
+                        <i class="fab fa-instagram mr-1 text-pink-500"></i> Instagram
+                    </a>
+                    <a href="https://www.linkedin.com/" target="_blank" class="bg-blue-600 hover:bg-blue-500 border border-blue-700 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors">
+                        <i class="fab fa-linkedin mr-1"></i> LinkedIn
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- App 3: Projects Folder Explorer -->
+    <div id="win-projects" class="window w-[600px] h-[450px] hidden" style="top: 150px; left: 200px; z-index: 12;">
+        <div id="win-projects-header" class="window-header h-8 bg-winBorder flex items-center px-4 justify-between select-none">
+            <div class="flex gap-2">
+                <div class="w-3 h-3 rounded-full bg-red-500 cursor-pointer hover:opacity-80 transition-opacity" onclick="closeWindow('win-projects')"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500 cursor-pointer hover:opacity-80 transition-opacity" onclick="closeWindow('win-projects')"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+            </div>
+            <div class="text-xs font-mono text-gray-400">/home/guest/projects</div>
+            <div class="w-12"></div>
+        </div>
+        
+        <div class="flex-1 bg-osBg flex flex-col">
+            <div class="bg-gray-800/50 p-2 flex gap-4 text-sm text-gray-300 border-b border-gray-700">
+                <i class="fas fa-arrow-left cursor-pointer hover:text-white"></i>
+                <i class="fas fa-arrow-right text-gray-600"></i>
+                <i class="fas fa-arrow-up cursor-pointer hover:text-white"></i>
+                <div class="bg-black/50 px-2 rounded flex-1 font-mono text-xs flex items-center">
+                    ~/projects
+                </div>
+            </div>
+            
+            <div class="p-6 grid grid-cols-2 md:grid-cols-3 gap-8 overflow-y-auto">
+                <!-- Cashew -->
+                <div class="flex flex-col items-center group cursor-pointer text-center" onclick="openProject('cashew')">
+                    <i class="fas fa-brain text-5xl text-purple-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                    <span class="text-sm text-white font-medium">Cashew App</span>
+                    <span class="text-xs text-gray-500 font-mono mt-1">AI / Mobile App</span>
+                </div>
+
+                <!-- Ericsson -->
+                <div class="flex flex-col items-center group cursor-pointer text-center" onclick="openProject('ericsson')">
+                    <i class="fas fa-network-wired text-5xl text-blue-500 mb-2 group-hover:scale-110 transition-transform"></i>
+                    <span class="text-sm text-white font-medium">CNIV Platform</span>
+                    <span class="text-xs text-gray-500 font-mono mt-1">Ericsson / Automation</span>
+                </div>
+
+                <!-- CanSat -->
+                <div class="flex flex-col items-center group cursor-pointer text-center" onclick="openProject('cansat')">
+                    <i class="fas fa-satellite text-5xl text-gray-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                    <span class="text-sm text-white font-medium">Team Atlas CanSat</span>
+                    <span class="text-xs text-gray-500 font-mono mt-1">Aerospace Design</span>
+                </div>
+
+                <!-- F1 in Schools -->
+                <div class="flex flex-col items-center group cursor-pointer text-center" onclick="openProject('f1')">
+                    <i class="fas fa-flag-checkered text-5xl text-red-500 mb-2 group-hover:scale-110 transition-transform"></i>
+                    <span class="text-sm text-white font-medium">Catalyst Racing</span>
+                    <span class="text-xs text-gray-500 font-mono mt-1">F1 in Schools / Aero</span>
+                </div>
+
+                <!-- Pothole System -->
+                <div class="flex flex-col items-center group cursor-pointer text-center" onclick="openProject('pothole')">
+                    <i class="fas fa-road text-5xl text-orange-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                    <span class="text-sm text-white font-medium">Pothole Detection</span>
+                    <span class="text-xs text-gray-500 font-mono mt-1">Computer Vision</span>
+                </div>
+
+                <!-- Marine System -->
+                <div class="flex flex-col items-center group cursor-pointer text-center" onclick="openProject('marine')">
+                    <i class="fas fa-life-ring text-5xl text-termCyan mb-2 group-hover:scale-110 transition-transform"></i>
+                    <span class="text-sm text-white font-medium">Marine Safety Dev</span>
+                    <span class="text-xs text-gray-500 font-mono mt-1">Embedded / ESP-32</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- App 4: Project Detail Viewer -->
+    <div id="win-project-viewer" class="window w-[450px] h-[550px] hidden" style="top: 100px; left: 450px; z-index: 13;">
+        <div id="win-project-viewer-header" class="window-header h-8 bg-winBorder flex items-center px-4 justify-between select-none">
+            <div class="flex gap-2">
+                <div class="w-3 h-3 rounded-full bg-red-500 cursor-pointer hover:opacity-80 transition-opacity" onclick="closeWindow('win-project-viewer')"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500 cursor-pointer hover:opacity-80 transition-opacity" onclick="closeWindow('win-project-viewer')"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+            </div>
+            <div class="text-xs font-mono text-gray-400">project_details.exe</div>
+            <div class="w-12"></div>
+        </div>
+        
+        <div class="flex-1 bg-[#0a0a0c] flex flex-col overflow-y-auto">
+            <div class="w-full h-48 bg-gray-900 border-b border-gray-800 relative">
+                <img id="pv-img" src="" alt="Project Image" class="w-full h-full object-cover filter grayscale hover:grayscale-0 transition-all duration-500">
+                <div class="absolute inset-0 bg-gradient-to-t from-[#0a0a0c] via-transparent to-transparent"></div>
+            </div>
+            <div class="p-6">
+                <h2 id="pv-title" class="text-2xl font-bold text-white mb-2">Project Title</h2>
+                <span id="pv-tech" class="inline-block bg-termCyan/10 text-termCyan border border-termCyan/30 px-2 py-1 rounded text-xs font-mono mb-4">Tech Stack</span>
+                <p id="pv-desc" class="text-gray-300 text-sm leading-relaxed">Project description goes here...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== TASKBAR ==================== -->
+    <div class="absolute bottom-0 w-full h-12 bg-taskbar border-t border-gray-800 flex items-center justify-between px-4 z-50">
+        <div class="flex items-center gap-2">
+            <button class="text-white hover:text-termCyan p-2 font-bold font-mono tracking-wider flex items-center gap-2">
+                <i class="fab fa-linux text-xl"></i> DONAL_OS
+            </button>
+            <div class="w-px h-6 bg-gray-700 mx-2"></div>
+            
+            <div id="task-terminal" class="bg-gray-800 border-b-2 border-termGreen px-3 py-1 rounded-t text-xs font-mono text-gray-300 cursor-pointer transition-colors hover:bg-gray-700" onclick="bringToFrontById('win-terminal')">
+                <i class="fas fa-terminal text-termGreen mr-1"></i> terminal
+            </div>
+            <div id="task-profile" class="bg-gray-800 border-b-2 border-termCyan px-3 py-1 rounded-t text-xs font-mono text-gray-300 cursor-pointer transition-colors hover:bg-gray-700" onclick="bringToFrontById('win-profile')">
+                <i class="fas fa-image text-termCyan mr-1"></i> profile
+            </div>
+            <div id="task-projects" class="bg-gray-800 border-b-2 border-termYellow px-3 py-1 rounded-t text-xs font-mono text-gray-300 cursor-pointer hidden transition-colors hover:bg-gray-700" onclick="bringToFrontById('win-projects')">
+                <i class="fas fa-folder text-termYellow mr-1"></i> projects
+            </div>
+            <div id="task-project-viewer" class="bg-gray-800 border-b-2 border-purple-500 px-3 py-1 rounded-t text-xs font-mono text-gray-300 cursor-pointer hidden transition-colors hover:bg-gray-700" onclick="bringToFrontById('win-project-viewer')">
+                <i class="fas fa-file-code text-purple-500 mr-1"></i> details
+            </div>
+        </div>
+
+        <div class="flex items-center gap-4 text-gray-400 text-sm font-mono">
+            <i class="fas fa-wifi"></i>
+            <i class="fas fa-battery-full text-termGreen"></i>
+            <span id="os-clock" class="text-white">00:00</span>
+        </div>
+    </div>
+
+    <a id="downloadLink" style="display: none;"></a>
+
+    <!-- Scripts -->
+    <script>
+        // Clock Logic
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('os-clock').textContent = timeString;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Window Management
+        let highestZ = 20;
+
+        function openWindow(id) {
+            const win = document.getElementById(id);
+            win.classList.remove('hidden');
+            bringToFront(win);
+            
+            const taskPrefix = id.replace('win-', 'task-');
+            const taskItem = document.getElementById(taskPrefix);
+            if(taskItem) taskItem.classList.remove('hidden');
+        }
+
+        function closeWindow(id) {
+            document.getElementById(id).classList.add('hidden');
+            
+            const taskPrefix = id.replace('win-', 'task-');
+            const taskItem = document.getElementById(taskPrefix);
+            if(taskItem) taskItem.classList.add('hidden');
+        }
+
+        function bringToFrontById(id) {
+            const win = document.getElementById(id);
+            if(win.classList.contains('hidden')) {
+                openWindow(id);
+            } else {
+                bringToFront(win);
+            }
+        }
+
+        function bringToFront(element) {
+            highestZ++;
+            element.style.zIndex = highestZ;
+        }
+
+        // Draggable Logic
+        function makeDraggable(element) {
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            const header = document.getElementById(element.id + "-header");
+            
+            if (header) {
+                header.onmousedown = dragMouseDown;
+            }
+
+            function dragMouseDown(e) {
+                e.preventDefault();
+                bringToFront(element);
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                document.onmouseup = closeDragElement;
+                document.onmousemove = elementDrag;
+            }
+
+            function elementDrag(e) {
+                e.preventDefault();
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                element.style.top = (element.offsetTop - pos2) + "px";
+                element.style.left = (element.offsetLeft - pos1) + "px";
+            }
+
+            function closeDragElement() {
+                document.onmouseup = null;
+                document.onmousemove = null;
+            }
+
+            element.addEventListener('mousedown', () => bringToFront(element));
+        }
+
+        document.querySelectorAll('.window').forEach(makeDraggable);
+
+        // Project Data & Viewer Logic
+        const projectData = {
+            'cashew': {
+                title: 'Cashew App',
+                tech: 'AI / Mobile App / Startup',
+                desc: 'Built and led a team developing an AI-powered contact memory app. Pitched at Patch Accelerator Demo Day to 300+ attendees, secured early testers, and led product design, branding, and investor outreach.',
+                img: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=600&auto=format&fit=crop'
+            },
+            'ericsson': {
+                title: 'CNIV Platform',
+                tech: 'Ericsson / Automation / UI',
+                desc: 'Built automation scripts and redesigned UI components for Ericsson\'s Cloud Native Infrastructure Verification (CNIV) platform, drastically improving deployment efficiency and lowering customer support load.',
+                img: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=600&auto=format&fit=crop'
+            },
+            'cansat': {
+                title: 'Team Atlas CanSat',
+                tech: 'Aerospace / Sensors',
+                desc: 'Designed and launched a CanSat to assess exoplanet habitability using environmental sensors, onboard imaging, and a custom landing system. Led the Aerospace and Satellite Design division.',
+                img: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop'
+            },
+            'f1': {
+                title: 'Catalyst Racing',
+                tech: 'F1 in Schools / CAD / CFD',
+                desc: 'Managed engineering and design for Ireland\'s fastest F1 in Schools car, leading the team to 5th place worldwide. Spearheaded aerodynamic design and complex CFD analysis.',
+                img: 'https://images.unsplash.com/photo-1532983330958-4b32bbe9aa05?q=80&w=600&auto=format&fit=crop'
+            },
+            'pothole': {
+                title: 'Pothole Detection',
+                tech: 'Computer Vision / AI',
+                desc: 'Developed an automated system to detect and report road potholes using computer vision algorithms, improving road safety tracking and maintenance efficiency.',
+                img: 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?q=80&w=600&auto=format&fit=crop'
+            },
+            'marine': {
+                title: 'Marine Safety Systems',
+                tech: 'Embedded / ESP-32 / IoT',
+                desc: 'Development of Embedded Safety Systems to Reduce Marine Casualties. Built a real-time ESP-32 tracking device integrated into buoyancy aids to locate overboard ship passengers.',
+                img: 'https://images.unsplash.com/photo-1582967788606-a171c1080cb0?q=80&w=600&auto=format&fit=crop'
+            }
+        };
+
+        function openProject(id) {
+            const data = projectData[id];
+            if(!data) return;
+            
+            document.getElementById('pv-title').textContent = data.title;
+            document.getElementById('pv-tech').textContent = data.tech;
+            document.getElementById('pv-desc').textContent = data.desc;
+            document.getElementById('pv-img').src = data.img;
+            
+            openWindow('win-project-viewer');
+        }
+
+        // CV Download Function - Downloads the actual hosted PDF file
+        function downloadCV() {
+            const a = document.getElementById('downloadLink');
+            // Make sure your PDF is uploaded to GitHub in the same folder with this exact name!
+            a.href = './Donal_McDermott_Resume_2026.pdf';
+            a.download = 'Donal_McDermott_Resume_2026.pdf';
+            a.click();
+        }
+    </script>
+</body>
+</html>
