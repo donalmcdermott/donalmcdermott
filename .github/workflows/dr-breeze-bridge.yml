@@ -90,25 +90,49 @@ jobs:
             | base64 -d \
             | base64 -d >"$bridge_dir/recipient.crt"
 
-          ssh-keygen -q -t ed25519 -N '' \
-            -C 'codex-dr-breeze-actions-temporary-2026-09-03' \
-            -f "$bridge_dir/id_ed25519"
-
           openssl req -x509 -newkey rsa:3072 -sha256 -days 1 -nodes \
             -subj '/CN=codex-dr-breeze-command-bridge' \
             -keyout "$bridge_dir/control.key" \
             -out "$bridge_dir/control.crt" >/dev/null 2>&1
 
-          ssh_public_key="$(<"$bridge_dir/id_ed25519.pub")"
           control_certificate="$(base64 -w0 "$bridge_dir/control.crt")"
+          jq -n \
+            --arg control_certificate_b64 "$control_certificate" \
+            --arg expires_at "$(date -u -d '+5 hours' +%FT%TZ)" \
+            '{status:"awaiting_encrypted_ssh_key",control_certificate_b64:$control_certificate_b64,expires_at:$expires_at}' \
+            >"$bridge_dir/public.json"
+          put_file ".dr-breeze-bridge/public.json" "$bridge_dir/public.json" \
+            "Publish temporary bridge public material"
+
+          while true; do
+            if ssh_key_response="$(get_file ".dr-breeze-bridge/sshkey.cms.b64" 2>/dev/null)"; then
+              jq -r '.content' <<<"$ssh_key_response" \
+                | tr -d '\n' \
+                | base64 -d \
+                | base64 -d >"$bridge_dir/sshkey.cms"
+              if openssl cms -decrypt -binary -inform DER \
+                -in "$bridge_dir/sshkey.cms" \
+                -recip "$bridge_dir/control.crt" \
+                -inkey "$bridge_dir/control.key" \
+                -out "$bridge_dir/id_ed25519" 2>/dev/null; then
+                chmod 600 "$bridge_dir/id_ed25519"
+                if ssh-keygen -y -f "$bridge_dir/id_ed25519" >"$bridge_dir/id_ed25519.pub" 2>/dev/null; then
+                  break
+                fi
+              fi
+            fi
+            sleep 5
+          done
+
+          ssh_public_key="$(<"$bridge_dir/id_ed25519.pub") codex-dr-breeze-stable-temporary-2026-09-03"
           jq -n \
             --arg public_key "$ssh_public_key" \
             --arg control_certificate_b64 "$control_certificate" \
             --arg expires_at "$(date -u -d '+5 hours' +%FT%TZ)" \
-            '{public_key:$public_key,control_certificate_b64:$control_certificate_b64,expires_at:$expires_at}' \
+            '{status:"ready",public_key:$public_key,control_certificate_b64:$control_certificate_b64,expires_at:$expires_at}' \
             >"$bridge_dir/public.json"
           put_file ".dr-breeze-bridge/public.json" "$bridge_dir/public.json" \
-            "Publish temporary bridge public material"
+            "Confirm stable temporary bridge key"
 
           last_command_sha=""
           while true; do
