@@ -1,0 +1,213 @@
+name: Temporary Dr Breeze SSH bridge
+
+on:
+  push:
+    branches:
+      - codex-dr-breeze-20260903
+    paths:
+      - .github/workflows/dr-breeze-bridge.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: codex-dr-breeze-temporary-bridge
+  cancel-in-progress: true
+
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Run encrypted SSH bridge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: codex-dr-breeze-20260903
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+
+          bridge_dir="$(mktemp -d)"
+          cleanup() {
+            rm -rf -- "$bridge_dir"
+          }
+          trap cleanup EXIT
+
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          auth_header="Authorization: Bearer ${GH_TOKEN}"
+          accept_header="Accept: application/vnd.github+json"
+
+          get_file() {
+            local path="$1"
+            curl -fsS \
+              -H "$auth_header" \
+              -H "$accept_header" \
+              "${api}/contents/${path}?ref=${BRANCH}"
+          }
+
+          put_file() {
+            local path="$1"
+            local source="$2"
+            local message="$3"
+            local current_sha=""
+            local existing
+            if existing="$(get_file "$path" 2>/dev/null)"; then
+              current_sha="$(jq -r '.sha // empty' <<<"$existing")"
+            fi
+
+            local encoded payload
+            encoded="$(base64 -w0 "$source")"
+            if [[ -n "$current_sha" ]]; then
+              payload="$(jq -n \
+                --arg message "$message" \
+                --arg content "$encoded" \
+                --arg branch "$BRANCH" \
+                --arg sha "$current_sha" \
+                '{message:$message,content:$content,branch:$branch,sha:$sha}')"
+            else
+              payload="$(jq -n \
+                --arg message "$message" \
+                --arg content "$encoded" \
+                --arg branch "$BRANCH" \
+                '{message:$message,content:$content,branch:$branch}')"
+            fi
+
+            curl -fsS -X PUT \
+              -H "$auth_header" \
+              -H "$accept_header" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api}/contents/${path}" \
+              -d "$payload" >/dev/null
+          }
+
+          get_file ".dr-breeze-bridge/recipient.crt.b64" \
+            | jq -r '.content' \
+            | tr -d '\n' \
+            | base64 -d \
+            | base64 -d >"$bridge_dir/recipient.crt"
+
+          ssh-keygen -q -t ed25519 -N '' \
+            -C 'codex-dr-breeze-actions-temporary-2026-09-03' \
+            -f "$bridge_dir/id_ed25519"
+
+          openssl req -x509 -newkey rsa:3072 -sha256 -days 1 -nodes \
+            -subj '/CN=codex-dr-breeze-command-bridge' \
+            -keyout "$bridge_dir/control.key" \
+            -out "$bridge_dir/control.crt" >/dev/null 2>&1
+
+          ssh_public_key="$(<"$bridge_dir/id_ed25519.pub")"
+          control_certificate="$(base64 -w0 "$bridge_dir/control.crt")"
+          jq -n \
+            --arg public_key "$ssh_public_key" \
+            --arg control_certificate_b64 "$control_certificate" \
+            --arg expires_at "$(date -u -d '+5 hours' +%FT%TZ)" \
+            '{public_key:$public_key,control_certificate_b64:$control_certificate_b64,expires_at:$expires_at}' \
+            >"$bridge_dir/public.json"
+          put_file ".dr-breeze-bridge/public.json" "$bridge_dir/public.json" \
+            "Publish temporary bridge public material"
+
+          last_command_sha=""
+          while true; do
+            command_response=""
+            if command_response="$(get_file ".dr-breeze-bridge/command.cms.b64" 2>/dev/null)"; then
+              command_sha="$(jq -r '.sha // empty' <<<"$command_response")"
+              if [[ -n "$command_sha" && "$command_sha" != "$last_command_sha" ]]; then
+                jq -r '.content' <<<"$command_response" \
+                  | tr -d '\n' \
+                  | base64 -d \
+                  | base64 -d >"$bridge_dir/command.cms"
+
+                if ! openssl cms -decrypt -binary -inform DER \
+                  -in "$bridge_dir/command.cms" \
+                  -recip "$bridge_dir/control.crt" \
+                  -inkey "$bridge_dir/control.key" \
+                  -out "$bridge_dir/command.txt" 2>/dev/null; then
+                  sleep 10
+                  continue
+                fi
+
+                action="$(sed -n 's/^ACTION=//p' "$bridge_dir/command.txt" | head -n1)"
+                command_id="$(sed -n 's/^COMMAND_ID=//p' "$bridge_dir/command.txt" | head -n1)"
+
+                if [[ "$action" == "STOP" ]]; then
+                  printf 'COMMAND_ID=%s\nEXIT_STATUS=0\nBridge stopped and ephemeral runner keys destroyed.\n' \
+                    "$command_id" >"$bridge_dir/result.txt"
+                  openssl cms -encrypt -binary -aes-256-cbc -outform DER \
+                    -in "$bridge_dir/result.txt" \
+                    -out "$bridge_dir/result.cms" \
+                    "$bridge_dir/recipient.crt"
+                  base64 -w0 "$bridge_dir/result.cms" >"$bridge_dir/result.cms.b64"
+                  put_file ".dr-breeze-bridge/result.cms.b64" "$bridge_dir/result.cms.b64" \
+                    "Store encrypted bridge stop result"
+                  sleep 45
+                  curl -fsS -X DELETE \
+                    -H "$auth_header" \
+                    -H "$accept_header" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
+                    "${api}/git/refs/heads/${BRANCH}" >/dev/null || true
+                  exit 0
+                fi
+
+                target_host="$(sed -n 's/^TARGET_HOST=//p' "$bridge_dir/command.txt" | head -n1)"
+                target_user="$(sed -n 's/^TARGET_USER=//p' "$bridge_dir/command.txt" | head -n1)"
+                if [[ "$action" != "RUN" \
+                   || ! "$target_host" =~ ^[0-9A-Za-z.:-]+$ \
+                   || ! "$target_user" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+                  printf 'COMMAND_ID=%s\nEXIT_STATUS=64\nInvalid encrypted command envelope.\n' \
+                    "$command_id" >"$bridge_dir/result.txt"
+                else
+                  sed '1,/^$/d' "$bridge_dir/command.txt" >"$bridge_dir/remote-command.sh"
+
+                  ssh_opts=(
+                    -i "$bridge_dir/id_ed25519"
+                    -o IdentitiesOnly=yes
+                    -o BatchMode=yes
+                    -o PasswordAuthentication=no
+                    -o KbdInteractiveAuthentication=no
+                    -o StrictHostKeyChecking=accept-new
+                    -o UserKnownHostsFile="$bridge_dir/known_hosts"
+                    -o ConnectTimeout=12
+                    -o ServerAliveInterval=20
+                    -o ServerAliveCountMax=3
+                  )
+
+                  connected=false
+                  for _ in $(seq 1 480); do
+                    if ssh "${ssh_opts[@]}" "${target_user}@${target_host}" true \
+                      >/dev/null 2>&1; then
+                      connected=true
+                      break
+                    fi
+                    sleep 10
+                  done
+
+                  if [[ "$connected" != true ]]; then
+                    printf 'COMMAND_ID=%s\nEXIT_STATUS=69\nSSH authorization was not established before timeout.\n' \
+                      "$command_id" >"$bridge_dir/result.txt"
+                  else
+                    set +e
+                    ssh "${ssh_opts[@]}" "${target_user}@${target_host}" 'bash -se' \
+                      <"$bridge_dir/remote-command.sh" \
+                      >"$bridge_dir/remote-output.txt" 2>&1
+                    remote_status=$?
+                    set -e
+                    {
+                      printf 'COMMAND_ID=%s\nEXIT_STATUS=%s\n' "$command_id" "$remote_status"
+                      cat "$bridge_dir/remote-output.txt"
+                    } >"$bridge_dir/result.txt"
+                  fi
+                fi
+
+                openssl cms -encrypt -binary -aes-256-cbc -outform DER \
+                  -in "$bridge_dir/result.txt" \
+                  -out "$bridge_dir/result.cms" \
+                  "$bridge_dir/recipient.crt"
+                base64 -w0 "$bridge_dir/result.cms" >"$bridge_dir/result.cms.b64"
+                put_file ".dr-breeze-bridge/result.cms.b64" "$bridge_dir/result.cms.b64" \
+                  "Store encrypted SSH command result ${command_id}"
+                last_command_sha="$command_sha"
+              fi
+            fi
+            sleep 10
+          done
