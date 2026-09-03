@@ -187,7 +187,8 @@ jobs:
                       "$command_id" >"$bridge_dir/result.txt"
                   else
                     set +e
-                    ssh "${ssh_opts[@]}" "${target_user}@${target_host}" 'bash -se' \
+                    timeout --foreground --signal=TERM --kill-after=10s 240s \
+                      ssh "${ssh_opts[@]}" "${target_user}@${target_host}" 'bash -se' \
                       <"$bridge_dir/remote-command.sh" \
                       >"$bridge_dir/remote-output.txt" 2>&1
                     remote_status=$?
